@@ -3,13 +3,11 @@ using System.Text;
 
 namespace excel2json.GUI
 {
-
     /// <summary>
     /// 为GUI模式提供的整体数据管理
     /// </summary>
     class DataManager
     {
-
         // 数据导入设置
         private Program.Options mOptions;
         private Encoding mEncoding;
@@ -17,6 +15,7 @@ namespace excel2json.GUI
         // 导出数据
         private JsonExporter mJson;
         private CSDefineGenerator mCSharp;
+        private IniExporter mIni;
 
         /// <summary>
         /// 导出的Json文本
@@ -39,6 +38,23 @@ namespace excel2json.GUI
             }
         }
 
+        public string IniContext
+        {
+            get
+            {
+                if (mIni != null)
+                    return mIni.context;
+                else
+                    return "";
+            }
+        }
+
+        public string Error
+        {
+            get;
+            set;
+        }
+
         /// <summary>
         /// 保存Json
         /// </summary>
@@ -57,6 +73,11 @@ namespace excel2json.GUI
                 mCSharp.SaveToFile(filePath, mEncoding);
         }
 
+        public void saveIni(string filePath)
+        {
+            if (mIni != null)
+                mIni.SaveToFile(filePath, mEncoding, mOptions.ForceSheetName);
+        }
 
         /// <summary>
         /// 加载Excel文件
@@ -90,13 +111,17 @@ namespace excel2json.GUI
             mEncoding = cd;
 
             //-- Load Excel
-            ExcelLoader excel = new ExcelLoader(excelPath, header);
+            ExcelLoader excel = new ExcelLoader(excelPath, header, false);
 
             //-- C# 结构体定义
-            mCSharp = new CSDefineGenerator(excelPath, excel, options.ExcludePrefix);
+            mCSharp = new CSDefineGenerator(excelPath, excel, options);
 
             //-- 导出JSON
-            mJson = new JsonExporter(excel, options.Lowcase, options.ExportArray, options.DateFormat, options.ForceSheetName, header, options.ExcludePrefix, options.CellJson, options.AllString);
+            mJson = new JsonExporter(excel, options);
+
+            //-- 导出Ini
+            mIni = new IniExporter(excel, options);
+            Error = mIni.ErrorMsg;
         }
     }
 }

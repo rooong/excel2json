@@ -19,8 +19,12 @@ namespace excel2json.GUI
         private string mCurrentXlsx;
 
         // 支持语法高亮的文本框
-        private FastColoredTextBox mJsonTextBox;
-        private FastColoredTextBox mCSharpTextBox;
+        //private FastColoredTextBox mJsonTextBox;
+        //private FastColoredTextBox mCSharpTextBox;
+        //private FastColoredTextBox mIniTextBox;
+        private RichTextBox mJsonTextBox;
+        private RichTextBox mCSharpTextBox;
+        private RichTextBox mIniTextBox;
 
 
         // 文本框的样式
@@ -34,6 +38,8 @@ namespace excel2json.GUI
         // 打开的excel文件名，不包含后缀xlsx。。。
         private String FileName;
 
+        private string Error;
+
         /// <summary>
         /// 构造函数，初始化控件初值；创建文本框
         /// </summary>
@@ -42,17 +48,21 @@ namespace excel2json.GUI
             InitializeComponent();
 
             //-- syntax highlight text box
-            mJsonTextBox = createTextBoxInTab(this.tabPageJSON);
-            mJsonTextBox.Language = Language.Custom;
-            mJsonTextBox.TextChanged += new EventHandler<TextChangedEventArgs>(this.jsonTextChanged);
+            mJsonTextBox = createTextBoxInTabEx(this.tabPageJSON);
+            //mJsonTextBox.Language = Language.Custom;
+            //mJsonTextBox.TextChanged += new EventHandler<TextChangedEventArgs>(this.jsonTextChanged);
 
-            mCSharpTextBox = createTextBoxInTab(this.tabCSharp);
-            mCSharpTextBox.Language = Language.CSharp;
+            mCSharpTextBox = createTextBoxInTabEx(this.tabCSharp);
+            //mCSharpTextBox.Language = Language.CSharp;
 
+            mIniTextBox = createTextBoxInTabEx(this.tabIni);
             //-- componet init states
-            this.comboBoxType.SelectedIndex = 0;
+            this.comboBoxType.SelectedIndex = 1;
             this.comboBoxLowcase.SelectedIndex = 1;
-            this.comboBoxHeader.SelectedIndex = 1;
+            this.comboBoxHeader.SelectedIndex = 2;
+            this.comboBoxKey.SelectedIndex = 3;
+            this.comboBoxColumnNameRow.SelectedIndex = 0;
+            this.comboBoxValueTypeRow.SelectedIndex = this.comboBoxColumnNameRow.SelectedIndex + 1;
             this.comboBoxDateFormat.SelectedIndex = 0;
             this.comboBoxSheetName.SelectedIndex = 1;
 
@@ -71,6 +81,8 @@ namespace excel2json.GUI
             mExportButtonList.Add(this.btnSaveJson);
             mExportButtonList.Add(this.btnCopyCSharp);
             mExportButtonList.Add(this.btnSaveCSharp);
+            mExportButtonList.Add(this.btnCopyIni);
+            mExportButtonList.Add(this.btnSaveIni);
             enableExportButtons(false);
 
             //-- data manager
@@ -101,6 +113,19 @@ namespace excel2json.GUI
             tab.Controls.Add(textBox);
             return textBox;
         }
+        /// <summary>
+        /// 在一个TabPage中创建Text Box
+        /// </summary>
+        /// <param name="tab">TabPage容器控件</param>
+        /// <returns>新建的Text Box控件</returns>
+        private RichTextBox createTextBoxInTabEx(TabPage tab)
+        {
+            RichTextBox textBox = new RichTextBox();
+            textBox.Dock = DockStyle.Fill;
+            textBox.Font = new Font("Microsoft YaHei", 11F);
+            tab.Controls.Add(textBox);
+            return textBox;
+        }
 
         /// <summary>
         /// 设置Json文本高亮格式
@@ -122,7 +147,6 @@ namespace excel2json.GUI
         /// <param name="path">Excel文件路径</param>
         private void loadExcelAsync(string path)
         {
-
             mCurrentXlsx = path;
             FileName = System.IO.Path.GetFileNameWithoutExtension(path);
 
@@ -140,13 +164,19 @@ namespace excel2json.GUI
             options.ExportArray = this.comboBoxType.SelectedIndex == 0;
             options.Encoding = this.comboBoxEncoding.SelectedText;
             options.Lowcase = this.comboBoxLowcase.SelectedIndex == 0;
-            options.HeaderRows = int.Parse(this.comboBoxHeader.Text);
+            int rows = int.Parse(this.comboBoxHeader.Text);
+            options.HeaderRows = rows <= 0 ? 1 : rows;
+            options.KeyColumn = int.Parse(this.comboBoxKey.Text);
+            options.ColumnNameRow = int.Parse(this.comboBoxColumnNameRow.Text);
+            options.ValueTypeRow = int.Parse(this.comboBoxValueTypeRow.Text);
+            options.CommentRow = options.ValueTypeRow + 1;
             options.DateFormat = this.comboBoxDateFormat.Text;
             options.ForceSheetName = this.comboBoxSheetName.SelectedIndex == 0;
             options.ExcludePrefix = this.textBoxExculdePrefix.Text;
+            options.ExcludeColums = this.textBoxExculdeColumn.Text;
             options.CellJson = this.checkBoxCellJson.Checked;
             options.AllString = this.checkBoxAllString.Checked;
-
+            options.AfterSetOpt();
             //-- start import
             this.backgroundWorker.RunWorkerAsync(options);
         }
@@ -203,6 +233,10 @@ namespace excel2json.GUI
             lock (this.mDataMgr)
             {
                 this.mDataMgr.loadExcel((Program.Options)e.Argument);
+                if (this.mDataMgr.Error != null)
+                {
+                    Error = this.mDataMgr.Error;
+                }
             }
         }
 
@@ -211,22 +245,30 @@ namespace excel2json.GUI
         /// </summary>
         private void backgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-
             // 判断错误信息
             if (e.Error != null)
             {
                 showStatus(e.Error.Message, Color.Red);
                 return;
             }
-
             // 更新UI
             lock (this.mDataMgr)
             {
                 this.statusLabel.IsLink = false;
-                this.statusLabel.Text = "Load completed.";
+                string strLoadCompleteMsg = "Load completed.";
+                if (Error != null)
+                {
+                    showStatus(strLoadCompleteMsg + Error, Color.Red);
+                    Error = null;
+                }
+                else
+                {
+                    showStatus(strLoadCompleteMsg, Color.Black);
+                }
 
                 mJsonTextBox.Text = mDataMgr.JsonContext;
                 mCSharpTextBox.Text = mDataMgr.CSharpCode;
+                mIniTextBox.Text = mDataMgr.IniContext;
 
                 enableExportButtons(true);
             }
@@ -280,6 +322,9 @@ namespace excel2json.GUI
                                 break;
                             case 2:
                                 mDataMgr.saveCSharp(dlg.FileName);
+                                break;
+                            case 3:
+                                mDataMgr.saveIni(dlg.FileName);
                                 break;
                         }
                     }
@@ -347,6 +392,30 @@ namespace excel2json.GUI
         private void btnSaveCSharp_Click(object sender, EventArgs e)
         {
             saveToFile(2, "C# code file(*.cs)|*.cs");
+        }
+
+        private void btnCopyIni_Click(object sender, EventArgs e)
+        {
+            lock (mDataMgr)
+            {
+                Clipboard.SetText(mDataMgr.IniContext);
+                showStatus("ini text copyed to clipboard.", Color.Black);
+            }
+        }
+
+        private void btnSaveIni_Click(object sender, EventArgs e)
+        {
+            saveToFile(3, "Ini file(*.ini)|*.ini");
+        }
+
+        private void pictureBoxExcel_Click(object sender, EventArgs e)
+        {
+            btnImportExcel_Click(sender, e);
+        }
+
+        private void labelExcelFile_Click(object sender, EventArgs e)
+        {
+            btnImportExcel_Click(sender, e);
         }
     }
 }

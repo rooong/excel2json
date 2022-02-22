@@ -12,6 +12,10 @@ namespace excel2json
     /// </summary>
     sealed partial class Program
     {
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "ShowWindow", SetLastError = true)]
+        static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "FindWindow", SetLastError = true)]
+        public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
         /// <summary>
         /// 应用程序入口
         /// </summary>
@@ -19,6 +23,15 @@ namespace excel2json
         [STAThread]
         static void Main(string[] args)
         {
+            try
+            {
+                LogUtil.Configure();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                LogUtil.Error("程序加载失败", ex);
+            }
             if (args.Length <= 0)
             {
                 //-- GUI MODE ----------------------------------------------------------
@@ -37,6 +50,7 @@ namespace excel2json
 
                 if (parser.ParseArgumentsStrict(args, options, () => Environment.Exit(-1)))
                 {
+                    options.AfterSetOpt();
                     //-- 执行导出操作
                     try
                     {
@@ -65,7 +79,6 @@ namespace excel2json
         /// <param name="options">命令行参数</param>
         private static void Run(Options options)
         {
-
             //-- Excel File 
             string excelPath = options.ExcelPath;
             string excelName = Path.GetFileNameWithoutExtension(options.ExcelPath);
@@ -92,27 +105,39 @@ namespace excel2json
             string dateFormat = options.DateFormat;
 
             //-- Export path
-            string exportPath;
+            string exportJsonPath, exportIniPath;
             if (options.JsonPath != null && options.JsonPath.Length > 0)
             {
-                exportPath = options.JsonPath;
+                exportJsonPath = options.JsonPath;
             }
             else
             {
-                exportPath = Path.ChangeExtension(excelPath, ".json");
+                exportJsonPath = Path.ChangeExtension(excelPath, ".json");
+            }
+            if (options.IniPath != null && options.IniPath.Length > 0)
+            {
+                exportIniPath = options.IniPath;
+            }
+            else
+            {
+                exportIniPath = Path.ChangeExtension(excelPath, ".ini");
             }
 
             //-- Load Excel
-            ExcelLoader excel = new ExcelLoader(excelPath, header);
+            ExcelLoader excel = new ExcelLoader(excelPath, header, false);
 
-            //-- export
-            JsonExporter exporter = new JsonExporter(excel, options.Lowcase, options.ExportArray, dateFormat, options.ForceSheetName, header, options.ExcludePrefix, options.CellJson, options.AllString);
-            exporter.SaveToFile(exportPath, cd);
+            //-- export json
+            JsonExporter json_exporter = new JsonExporter(excel, options);
+            json_exporter.SaveToFile(exportJsonPath, cd);
+
+            //-- export ini
+            IniExporter ini_exporter = new IniExporter(excel, options);
+            ini_exporter.SaveToFile(exportIniPath, cd, options.ForceSheetName);
 
             //-- 生成C#定义文件
             if (options.CSharpPath != null && options.CSharpPath.Length > 0)
             {
-                CSDefineGenerator generator = new CSDefineGenerator(excelName, excel, options.ExcludePrefix);
+                CSDefineGenerator generator = new CSDefineGenerator(excelName, excel, options);
                 generator.SaveToFile(options.CSharpPath, cd);
             }
         }

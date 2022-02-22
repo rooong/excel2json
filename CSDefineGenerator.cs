@@ -27,7 +27,7 @@ namespace excel2json
             }
         }
 
-        public CSDefineGenerator(string excelName, ExcelLoader excel, string excludePrefix)
+        public CSDefineGenerator(string excelName, ExcelLoader excel, Program.Options mOptions)
         {
             //-- 创建代码字符串
             StringBuilder sb = new StringBuilder();
@@ -40,11 +40,11 @@ namespace excel2json
             sb.AppendFormat("// Generate From {0}.xlsx", excelName);
             sb.AppendLine();
             sb.AppendLine();
-
-            for (int i = 0; i < excel.Sheets.Count; i++)
+            var Sheets = excel.Sheets;
+            for (int i = 0; i < Sheets.Count; i++)
             {
-                DataTable sheet = excel.Sheets[i];
-                sb.Append(_exportSheet(sheet, excludePrefix));
+                DataTable sheet = Sheets[i].table;
+                sb.Append(_exportSheet(sheet, mOptions));
             }
 
             sb.AppendLine();
@@ -53,31 +53,36 @@ namespace excel2json
             mCode = sb.ToString();
         }
 
-        private string _exportSheet(DataTable sheet, string excludePrefix)
+        private string _exportSheet(DataTable sheet, Program.Options mOptions)
         {
             if (sheet.Columns.Count < 0 || sheet.Rows.Count < 2)
                 return "";
 
             string sheetName = sheet.TableName;
+            var excludePrefix = mOptions.ExcludePrefix;
             if (excludePrefix.Length > 0 && sheetName.StartsWith(excludePrefix))
                 return "";
 
             // get field list
             List<FieldDef> fieldList = new List<FieldDef>();
-            DataRow typeRow = sheet.Rows[0];
-            DataRow commentRow = sheet.Rows[1];
+            DataRow colValueNameRow = sheet.Rows[mOptions.ColumnNameRow];
+            DataRow typeRow = sheet.Rows[mOptions.ValueTypeRow];
+            DataRow commentRow = sheet.Rows[mOptions.CommentRow];
 
-            foreach (DataColumn column in sheet.Columns)
+            for (int i = 0; i < sheet.Columns.Count; i++)
             {
+                var columnName = colValueNameRow[i].ToString();
+                if (columnName.Length <= 0)
+                    break;
+            
                 // 过滤掉包含指定前缀的列
-                string columnName = column.ToString();
                 if (excludePrefix.Length > 0 && columnName.StartsWith(excludePrefix))
                     continue;
 
                 FieldDef field;
-                field.name = column.ToString();
-                field.type = typeRow[column].ToString();
-                field.comment = commentRow[column].ToString();
+                field.name = columnName;
+                field.type = typeRow[i].ToString();
+                field.comment = commentRow[i].ToString();
 
                 fieldList.Add(field);
             }
